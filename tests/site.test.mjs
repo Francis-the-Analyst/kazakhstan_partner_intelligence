@@ -33,6 +33,37 @@ test('keeps map points separated and faithful to their score', () => {
   }
 });
 
+test('adapts map cities to an accessible multi-city selection', () => {
+  const { KZ_PROSPECTS, KZCore } = load();
+  const empty = KZCore.emptyFilters();
+  assert.deepEqual([...KZCore.mapCities(empty)], ['Almaty', 'Astana', 'Shymkent']);
+
+  const selected = KZCore.toggleCitySelection(empty.city, 'Astana');
+  const compared = KZCore.toggleCitySelection(selected, 'Almaty');
+  assert.deepEqual([...compared], ['Almaty', 'Astana']);
+  assert.deepEqual([...KZCore.mapCities({ ...empty, city:compared })], ['Almaty', 'Astana']);
+
+  const rows = KZCore.derive(KZ_PROSPECTS, { ...empty, city:compared }, { key:'score', dir:'desc' });
+  assert.equal(rows.length, 60);
+  assert.deepEqual([...new Set(rows.map((row) => row.city))].sort(), ['Almaty', 'Astana']);
+
+  const deselected = KZCore.toggleCitySelection(compared, 'Astana');
+  assert.deepEqual([...deselected], ['Almaty']);
+  assert.match(read('base.css'), /grid-template-columns:repeat\(var\(--city-count,3\),minmax\(0,1fr\)\)/);
+});
+
+test('renders competitive intelligence only when research contains evidence', () => {
+  const { KZ_PROSPECTS, KZCore } = load();
+  const generic = KZ_PROSPECTS.find((row) => row.name === 'MK Mebel');
+  const interstone = KZ_PROSPECTS.find((row) => row.city === 'Almaty' && row.name.startsWith('Interstone'));
+
+  assert.equal(KZCore.hasCompetitiveEvidence(generic), false);
+  assert.equal(KZCore.competitiveBlockHTML(generic), '');
+  assert.equal(KZCore.hasCompetitiveEvidence(interstone), true);
+  assert.match(KZCore.competitiveBlockHTML(interstone), /Competitive signal/);
+  assert.match(KZCore.competitiveBlockHTML(interstone), /Caesarstone/);
+});
+
 test('supports KPI shortcuts and evidenced competitor dossiers', () => {
   const { KZ_PROSPECTS, KZCore } = load();
   const high = KZCore.derive(KZ_PROSPECTS, KZCore.filtersForKpi('high', KZCore.emptyFilters()), { key:'score', dir:'desc' });

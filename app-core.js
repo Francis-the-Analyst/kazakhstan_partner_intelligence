@@ -1,12 +1,41 @@
 (function () {
   'use strict';
 
+  const CITY_ORDER = Object.freeze(['Almaty','Astana','Shymkent']);
   const emptyFilters = () => ({ city:'', category:'', showroom:'', priority:'', search:'' });
+  const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  function selectedCities(filtersOrValue) {
+    const raw = filtersOrValue && !Array.isArray(filtersOrValue) && typeof filtersOrValue === 'object' ? filtersOrValue.city : filtersOrValue;
+    const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const selected = new Set(values);
+    return CITY_ORDER.filter((city)=>selected.has(city));
+  }
+  function mapCities(filters) {
+    const selected = selectedCities(filters);
+    return selected.length ? selected : [...CITY_ORDER];
+  }
+  function toggleCitySelection(current, city) {
+    const selected = new Set(selectedCities(current));
+    if (selected.has(city)) selected.delete(city); else selected.add(city);
+    return CITY_ORDER.filter((name)=>selected.has(name));
+  }
+  function hasCompetitiveEvidence(row) {
+    const isMeaningful = (value) => {
+      const text = String(value || '').trim().toLowerCase();
+      return !!text && !text.includes('not evidenced in current research') && !text.includes('no competing or comparable brand relationship is evidenced');
+    };
+    return !!row && (isMeaningful(row.brands) || isMeaningful(row.evidence));
+  }
+  function competitiveBlockHTML(row) {
+    if (!hasCompetitiveEvidence(row)) return '';
+    return `<section class="dossier-block competitive-evidence"><p>Competitive signal</p><h3>${escapeHTML(row.brands)}</h3><span>${escapeHTML(row.evidence)}</span></section>`;
+  }
   const scoreValue = { High:3, 'Medium-High':2, Medium:1 };
   function derive(source, filters, sort) {
     const q = (filters.search || '').trim().toLowerCase();
+    const cities = selectedCities(filters);
     const rows = source.filter((row) => {
-      if (filters.city && row.city !== filters.city) return false;
+      if (cities.length && !cities.includes(row.city)) return false;
       if (filters.category && row.category !== filters.category) return false;
       if (filters.showroom && row.showroom !== filters.showroom) return false;
       if (filters.priority && row.priority !== filters.priority) return false;
@@ -52,7 +81,7 @@
     });
     return points.map(({quality,...point})=>point);
   }
-  window.KZCore = Object.freeze({ emptyFilters, derive, metrics, queue, layoutPoints, filtersForKpi });
+  window.KZCore = Object.freeze({ emptyFilters, selectedCities, mapCities, toggleCitySelection, hasCompetitiveEvidence, competitiveBlockHTML, derive, metrics, queue, layoutPoints, filtersForKpi });
 
   window.bootKZApp = function bootKZApp(options) {
     const source = window.KZ_PROSPECTS;
@@ -60,8 +89,16 @@
     const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
     const state = { filters:emptyFilters(), sort:{key:'score',dir:'desc'}, selectedId:null, route:'landing' };
     const pages = $$('.page');
-    const esc = (value) => String(value).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const esc = escapeHTML;
     const categoryClass = (v) => 'cat-' + v.toLowerCase().replace(/\s+/g,'-');
+    function syncFilterButtons() {
+      const cities = selectedCities(state.filters);
+      $$('[data-filter-button]').forEach((button)=>{
+        const key = button.dataset.filterButton;
+        const active = key === 'city' ? cities.includes(button.dataset.value) : state.filters[key] === button.dataset.value;
+        button.setAttribute('aria-pressed',String(active));
+      });
+    }
 
     const ownershipMarkup = '<p class="top-ownership">Market research &amp; dashboard created by <strong>Francisco González</strong></p>';
     $$('.landing-nav .wordmark, .topbar .brand-button').forEach((brand)=>{
@@ -101,7 +138,7 @@
       }
       state.filters=filtersForKpi(action,state.filters);
       if (action === 'all') $$('[data-filter]').forEach((input)=>input.value='');
-      $$('[data-filter-button]').forEach((button)=>button.setAttribute('aria-pressed',String(state.filters[button.dataset.filterButton]===button.dataset.value)));
+      syncFilterButtons();
       state.selectedId=null;
       render();
       $$('[data-view]').forEach((tab)=>tab.classList.toggle('active',tab.dataset.view==='accounts'));
@@ -116,8 +153,7 @@
       const target = $(`[data-page="${name}"] h1, [data-page="${name}"] h2`);
       if (target) { target.tabIndex=-1; target.focus({preventScroll:true}); }
     }
-    function mapHTML(rows) {
-      const cities = ['Almaty','Astana','Shymkent'];
+    function mapHTML(rows, cities) {
       return cities.map((city) => {
         const cityRows=rows.filter(r=>r.city===city);
         const positions=new Map(layoutPoints(cityRows,city).map(point=>[point.id,point]));
@@ -139,7 +175,7 @@
       const contact=[r.phone&&`<a href="tel:${r.phone.split('/')[0].replace(/[^\d+]/g,'')}">${esc(r.phone)}</a>`,r.email&&`<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`].filter(Boolean).join('');
       const web=r.website?`<a href="${esc(r.website)}" target="_blank" rel="noopener">Visit account website ↗</a>`:'';
       const sourceLink=r.source?`<a href="${esc(r.source)}" target="_blank">Open captured research ↗</a>`:'<span>Source not linked</span>';
-      return `<button class="detail-close" data-close-detail aria-label="Close prospect detail">×</button><p class="detail-kicker">Prospect dossier · ${r.city}</p><h2 tabindex="-1">${esc(r.name)}</h2><div class="detail-score"><strong>${r.score}</strong><span>potential<br>index</span></div><p class="reason">${esc(r.reason)}.</p><dl><div><dt>Profile</dt><dd>${r.category}</dd></div><div><dt>Physical exposure</dt><dd>${r.showroom}</dd></div><div><dt>Price position</dt><dd>${r.price}</dd></div><div><dt>Service breadth</dt><dd>${r.serviceBreadth}</dd></div><div><dt>Address</dt><dd>${esc(r.address)}</dd></div></dl><section class="dossier-block competitive-evidence"><p>Competitive signal</p><h3>${esc(r.brands)}</h3><span>${esc(r.evidence)}</span></section><section class="dossier-block next-action"><p>Recommended next action</p><h3>${esc(r.recommendedAction)}</h3><span>Commercial recommendation · validate with the local team.</span></section><div class="contacts">${contact||'<span>Contact not listed</span>'}${web}</div><div class="research-source"><p>Evidence source</p>${sourceLink}</div><p class="method-note">Working-priority hypothesis based on category fit, physical exposure and price positioning. Competitive statements are shown only where supported by captured research.</p>`;
+      return `<button class="detail-close" data-close-detail aria-label="Close prospect detail">×</button><p class="detail-kicker">Prospect dossier · ${r.city}</p><h2 tabindex="-1">${esc(r.name)}</h2><div class="detail-score"><strong>${r.score}</strong><span>potential<br>index</span></div><p class="reason">${esc(r.reason)}.</p><dl><div><dt>Profile</dt><dd>${r.category}</dd></div><div><dt>Physical exposure</dt><dd>${r.showroom}</dd></div><div><dt>Price position</dt><dd>${r.price}</dd></div><div><dt>Service breadth</dt><dd>${r.serviceBreadth}</dd></div><div><dt>Address</dt><dd>${esc(r.address)}</dd></div></dl>${competitiveBlockHTML(r)}<section class="dossier-block next-action"><p>Recommended next action</p><h3>${esc(r.recommendedAction)}</h3><span>Commercial recommendation · validate with the local team.</span></section><div class="contacts">${contact||'<span>Contact not listed</span>'}${web}</div><div class="research-source"><p>Evidence source</p>${sourceLink}</div><p class="method-note">Working-priority hypothesis based on category fit, physical exposure and price positioning. Competitive statements are shown only where supported by captured research.</p>`;
     }
     function render() {
       const rows=derive(source,state.filters,state.sort), m=metrics(rows);
@@ -148,7 +184,12 @@
       const denominators={total:source.length,high:Math.max(1,m.total),showroom:Math.max(1,m.total),cities:3};
       Object.entries(values).forEach(([key,value])=>$$(`[data-metric="${key}"]`).forEach((el)=>{const fill=el.closest('article')?.querySelector('.kpi-footer i b');if(fill)fill.style.width=`${Math.min(100,Math.round(value/denominators[key]*100))}%`;}));
       $$('[data-result-count]').forEach(el=>el.textContent=`${rows.length} of ${source.length} prospects`);
-      $$('[data-map]').forEach(el=>el.innerHTML=mapHTML(rows));
+      const cities = mapCities(state.filters);
+      $$('[data-map]').forEach((el)=>{
+        el.style.setProperty('--city-count',cities.length);
+        el.dataset.cityCount=String(cities.length);
+        el.innerHTML=mapHTML(rows,cities);
+      });
       $$('[data-queue]').forEach(el=>el.innerHTML=queueHTML(rows));
       $$('[data-table-body]').forEach(el=>el.innerHTML=tableHTML(rows));
       const selected=source.find(r=>r.id===state.selectedId);
@@ -161,8 +202,8 @@
       const nav=event.target.closest('[data-route]'); if(nav){route(nav.dataset.route);return;}
       const choice=event.target.closest('[data-select]'); if(choice){state.selectedId=choice.dataset.select;render();setTimeout(()=>{$('[data-detail].open h2')?.focus()},20);return;}
       if(event.target.closest('[data-close-detail]')){state.selectedId=null;render();return;}
-      const reset=event.target.closest('[data-reset]'); if(reset){state.filters=emptyFilters();$$('[data-filter]').forEach(el=>el.value='');$$('[data-filter-button]').forEach(el=>el.setAttribute('aria-pressed','false'));render();return;}
-      const filterButton=event.target.closest('[data-filter-button]'); if(filterButton){const key=filterButton.dataset.filterButton;const value=filterButton.dataset.value;const active=state.filters[key]===value;state.filters[key]=active?'':value;$$(`[data-filter-button="${key}"]`).forEach(el=>el.setAttribute('aria-pressed',String(!active&&el===filterButton)));state.selectedId=null;render();return;}
+      const reset=event.target.closest('[data-reset]'); if(reset){state.filters=emptyFilters();$$('[data-filter]').forEach(el=>el.value='');syncFilterButtons();render();return;}
+      const filterButton=event.target.closest('[data-filter-button]'); if(filterButton){const key=filterButton.dataset.filterButton;const value=filterButton.dataset.value;if(key==='city'){state.filters.city=toggleCitySelection(state.filters.city,value);}else{state.filters[key]=state.filters[key]===value?'':value;}syncFilterButtons();state.selectedId=null;render();return;}
       const view=event.target.closest('[data-view]'); if(view){$$('[data-view]').forEach(el=>el.classList.toggle('active',el===view));const target=$(`#view-${view.dataset.view}`);if(target){target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});target.tabIndex=-1;target.focus({preventScroll:true});}return;}
       const sort=event.target.closest('[data-sort]'); if(sort){const key=sort.dataset.sort;state.sort={key,dir:state.sort.key===key&&state.sort.dir==='desc'?'asc':'desc'};render();return;}
       const theme=event.target.closest('[data-theme-toggle]'); if(theme){const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('kz-theme',next)}catch(e){};return;}
