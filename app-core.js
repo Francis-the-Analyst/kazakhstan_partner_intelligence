@@ -2,6 +2,7 @@
   'use strict';
 
   const CITY_ORDER = Object.freeze(['Almaty','Astana','Shymkent']);
+  const DASHBOARD_DATE_ISO = '2026-09-03';
   const emptyFilters = () => ({ city:'', category:'', showroom:'', priority:'', search:'' });
   const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   function selectedCities(filtersOrValue) {
@@ -55,6 +56,32 @@
   function metrics(rows) {
     return { total:rows.length, high:rows.filter(r=>r.priority==='High').length, showroom:rows.filter(r=>r.showroom==='Yes').length, cities:new Set(rows.map(r=>r.city)).size };
   }
+  function executiveSummary(rows, filters) {
+    const selected = selectedCities(filters);
+    const current = metrics(rows);
+    return {
+      cities:selected.length ? selected.join(' + ') : 'All cities',
+      prospects:current.total,
+      high:current.high,
+      showroom:current.showroom
+    };
+  }
+  const CSV_FIELDS = [
+    ['Account','name'],['City','city'],['Profile','category'],['Priority','priority'],['Potential index','score'],
+    ['Showroom','showroom'],['Price position','price'],['Service breadth','serviceBreadth'],['Address','address'],
+    ['Phone','phone'],['Email','email'],['Website','website'],['Competitive brands','brands'],
+    ['Competitive evidence','evidence'],['Recommended action','recommendedAction'],['Evidence source','source']
+  ];
+  const csvCell = (value) => `"${String(value ?? '').replace(/"/g,'""')}"`;
+  function prospectsCSV(rows) {
+    const header = CSV_FIELDS.map(([label])=>csvCell(label)).join(',');
+    const body = rows.map((row)=>CSV_FIELDS.map(([,key])=>csvCell(row[key])).join(','));
+    return `\ufeff${[header,...body].join('\r\n')}`;
+  }
+  function exportFilename(filters) {
+    const scope = selectedCities(filters).map((city)=>city.toLowerCase()).join('-') || 'all-cities';
+    return `kazakhstan-partner-intelligence-${scope}-${DASHBOARD_DATE_ISO}.csv`;
+  }
   function queue(rows, limit=6) { return rows.slice().sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name)).slice(0,limit); }
   function filtersForKpi(action, current) {
     if (action === 'all') return emptyFilters();
@@ -81,7 +108,7 @@
     });
     return points.map(({quality,...point})=>point);
   }
-  window.KZCore = Object.freeze({ emptyFilters, selectedCities, mapCities, toggleCitySelection, hasCompetitiveEvidence, competitiveBlockHTML, derive, metrics, queue, layoutPoints, filtersForKpi });
+  window.KZCore = Object.freeze({ emptyFilters, selectedCities, mapCities, toggleCitySelection, hasCompetitiveEvidence, competitiveBlockHTML, derive, metrics, executiveSummary, prospectsCSV, exportFilename, queue, layoutPoints, filtersForKpi });
 
   window.bootKZApp = function bootKZApp(options) {
     const source = window.KZ_PROSPECTS;
@@ -128,6 +155,11 @@
     $$('[data-view]').forEach((button,index)=>{
       const label=button.textContent.trim();
       button.innerHTML=`<span class="view-index">${String(index+1).padStart(2,'0')}</span><span class="view-copy"><b>${label}</b><small class="view-description">${viewDescriptions[button.dataset.view]}</small></span><span class="view-arrow" aria-hidden="true">↗</span>`;
+    });
+    const executiveContextMarkup = `<section class="executive-context" data-executive-context aria-label="Current filtered opportunity summary" aria-live="polite"><header><p>Current opportunity view</p><strong data-context-cities>All cities</strong></header><div class="context-metric"><strong data-context-prospects>70</strong><span>Prospects</span></div><div class="context-metric"><strong data-context-high>34</strong><span>High priority</span></div><div class="context-metric"><strong data-context-showroom>34</strong><span>Showrooms</span></div><footer aria-label="Dashboard updated · 3 September 2026"><span><b>Dashboard updated</b> · 3 September 2026 <i>Evidence status and recommended actions are retained in each dossier.</i></span><button type="button" data-export-csv>Export filtered CSV <b aria-hidden="true">↓</b></button></footer></section><p class="map-guidance"><span aria-hidden="true">↗</span><b>Explore an account.</b> Select any point to open the complete account dossier.</p>`;
+    $$('.decision').forEach((panel)=>{
+      const heading = $('.section-head',panel);
+      if (heading && !panel.querySelector('[data-executive-context]')) heading.insertAdjacentHTML('afterend',executiveContextMarkup);
     });
 
     function activateKpi(action) {
@@ -177,10 +209,31 @@
       const sourceLink=r.source?`<a href="${esc(r.source)}" target="_blank">Open captured research ↗</a>`:'<span>Source not linked</span>';
       return `<button class="detail-close" data-close-detail aria-label="Close prospect detail">×</button><p class="detail-kicker">Prospect dossier · ${r.city}</p><h2 tabindex="-1">${esc(r.name)}</h2><div class="detail-score"><strong>${r.score}</strong><span>potential<br>index</span></div><p class="reason">${esc(r.reason)}.</p><dl><div><dt>Profile</dt><dd>${r.category}</dd></div><div><dt>Physical exposure</dt><dd>${r.showroom}</dd></div><div><dt>Price position</dt><dd>${r.price}</dd></div><div><dt>Service breadth</dt><dd>${r.serviceBreadth}</dd></div><div><dt>Address</dt><dd>${esc(r.address)}</dd></div></dl>${competitiveBlockHTML(r)}<section class="dossier-block next-action"><p>Recommended next action</p><h3>${esc(r.recommendedAction)}</h3><span>Commercial recommendation · validate with the local team.</span></section><div class="contacts">${contact||'<span>Contact not listed</span>'}${web}</div><div class="research-source"><p>Evidence source</p>${sourceLink}</div><p class="method-note">Working-priority hypothesis based on category fit, physical exposure and price positioning. Competitive statements are shown only where supported by captured research.</p>`;
     }
+    function downloadCurrentView(rows) {
+      const blob = new Blob([prospectsCSV(rows)],{type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href=url;
+      link.download=exportFilename(state.filters);
+      link.hidden=true;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),0);
+    }
     function render() {
       const rows=derive(source,state.filters,state.sort), m=metrics(rows);
       const values={total:m.total,high:m.high,showroom:m.showroom,cities:m.cities};
       Object.entries(values).forEach(([key,value])=>$$(`[data-metric="${key}"]`).forEach(el=>el.textContent=value));
+      const summary = executiveSummary(rows,state.filters);
+      $$('[data-context-cities]').forEach((el)=>el.textContent=summary.cities);
+      $$('[data-context-prospects]').forEach((el)=>el.textContent=summary.prospects);
+      $$('[data-context-high]').forEach((el)=>el.textContent=summary.high);
+      $$('[data-context-showroom]').forEach((el)=>el.textContent=summary.showroom);
+      $$('[data-export-csv]').forEach((button)=>{
+        button.disabled=rows.length===0;
+        button.setAttribute('aria-label',`Export ${rows.length} filtered prospects as CSV`);
+      });
       const denominators={total:source.length,high:Math.max(1,m.total),showroom:Math.max(1,m.total),cities:3};
       Object.entries(values).forEach(([key,value])=>$$(`[data-metric="${key}"]`).forEach((el)=>{const fill=el.closest('article')?.querySelector('.kpi-footer i b');if(fill)fill.style.width=`${Math.min(100,Math.round(value/denominators[key]*100))}%`;}));
       $$('[data-result-count]').forEach(el=>el.textContent=`${rows.length} of ${source.length} prospects`);
@@ -198,6 +251,7 @@
       $$('[data-sort]').forEach(el=>el.setAttribute('aria-sort',state.sort.key===el.dataset.sort?(state.sort.dir==='asc'?'ascending':'descending'):'none'));
     }
     document.addEventListener('click',(event)=>{
+      const exportButton=event.target.closest('[data-export-csv]'); if(exportButton){downloadCurrentView(derive(source,state.filters,state.sort));return;}
       const kpi=event.target.closest('[data-kpi-action]'); if(kpi){activateKpi(kpi.dataset.kpiAction);return;}
       const nav=event.target.closest('[data-route]'); if(nav){route(nav.dataset.route);return;}
       const choice=event.target.closest('[data-select]'); if(choice){state.selectedId=choice.dataset.select;render();setTimeout(()=>{$('[data-detail].open h2')?.focus()},20);return;}

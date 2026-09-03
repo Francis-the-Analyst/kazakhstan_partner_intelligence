@@ -64,6 +64,45 @@ test('renders competitive intelligence only when research contains evidence', ()
   assert.match(KZCore.competitiveBlockHTML(interstone), /Caesarstone/);
 });
 
+test('builds an executive summary for the current filtered view', () => {
+  const { KZ_PROSPECTS, KZCore } = load();
+  const filters = { ...KZCore.emptyFilters(), city:['Almaty'] };
+  const rows = KZCore.derive(KZ_PROSPECTS, filters, { key:'score', dir:'desc' });
+  const summary = KZCore.executiveSummary(rows, filters);
+  const expectedMetrics = KZCore.metrics(rows);
+
+  assert.deepEqual({ ...summary }, {
+    cities:'Almaty',
+    prospects:31,
+    high:expectedMetrics.high,
+    showroom:expectedMetrics.showroom
+  });
+  assert.equal(KZCore.executiveSummary(KZ_PROSPECTS, KZCore.emptyFilters()).cities, 'All cities');
+});
+
+test('exports the filtered intelligence as an Excel-safe CSV', () => {
+  const { KZ_PROSPECTS, KZCore } = load();
+  const interstone = KZ_PROSPECTS.find((row) => row.city === 'Almaty' && row.name.startsWith('Interstone'));
+  const csv = KZCore.prospectsCSV([interstone]);
+
+  assert.ok(csv.startsWith('\ufeff'));
+  assert.match(csv, /"Account","City","Profile","Priority","Potential index"/);
+  assert.match(csv, /"Interstone \(Caesarstone \/ Grandex Quartz official dealer\)"/);
+  assert.match(csv, /"Caesarstone; Avant Quartz; GRANDEX Quartz; NOBLLE Quartz"/);
+  assert.equal(csv.trim().split(/\r?\n/).length, 2);
+  assert.equal(KZCore.exportFilename({ city:['Astana','Almaty'] }), 'kazakhstan-partner-intelligence-almaty-astana-2026-09-03.csv');
+});
+
+test('ships the executive context, map guidance and emphatic city state', () => {
+  const controller = read('app-core.js');
+  const styles = read('base.css');
+  assert.match(controller, /data-executive-context/);
+  assert.match(controller, /Dashboard updated · 3 September 2026/);
+  assert.match(controller, /Select any point to open the complete account dossier/);
+  assert.match(controller, /data-export-csv/);
+  assert.match(styles, /\[data-filter-button="city"\]\[aria-pressed="true"\]/);
+});
+
 test('supports KPI shortcuts and evidenced competitor dossiers', () => {
   const { KZ_PROSPECTS, KZCore } = load();
   const high = KZCore.derive(KZ_PROSPECTS, KZCore.filtersForKpi('high', KZCore.emptyFilters()), { key:'score', dir:'desc' });
