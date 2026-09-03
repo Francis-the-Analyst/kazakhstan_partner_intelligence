@@ -46,6 +46,7 @@ test('ships both proposals, local assets and production root rewrite', () => {
   const launcher = read('index_R_P.html');
   assert.match(launcher, /proposal_A\.html/);
   assert.match(launcher, /proposal_B\.html/);
+  assert.match(launcher, /class="brand"[\s\S]*?<\/a><p class="top-ownership">Market research &amp; dashboard created by <strong>Francisco González<\/strong><\/p>/);
   for (const file of ['proposal_A.html', 'proposal_B.html']) {
     const html = read(file);
     assert.match(html, /src="data\.js"/);
