@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "/index_R_P.html"
+      "destination": "/proposal_A.html"
     }
   ],
   "headers": [

@@ -52,6 +52,28 @@ test('adapts map cities to an accessible multi-city selection', () => {
   assert.match(read('base.css'), /grid-template-columns:repeat\(var\(--city-count,3\),minmax\(0,1fr\)\)/);
 });
 
+test('supports multi-select profile and priority facets', () => {
+  const { KZ_PROSPECTS, KZCore } = load();
+  const profiles = KZCore.toggleFacetSelection('category', '', 'Kitchen');
+  const combinedProfiles = KZCore.toggleFacetSelection('category', profiles, 'Hybrid');
+  const priorities = KZCore.toggleFacetSelection('priority', '', 'High');
+  const combinedPriorities = KZCore.toggleFacetSelection('priority', priorities, 'Medium');
+
+  assert.deepEqual([...combinedProfiles], ['Hybrid', 'Kitchen']);
+  assert.deepEqual([...combinedPriorities], ['High', 'Medium']);
+
+  const filters = { ...KZCore.emptyFilters(), city:['Almaty','Astana'], category:combinedProfiles, priority:combinedPriorities };
+  const rows = KZCore.derive(KZ_PROSPECTS, filters, { key:'score', dir:'desc' });
+  assert.ok(rows.length > 1);
+  assert.ok(rows.every((row) => ['Almaty','Astana'].includes(row.city)));
+  assert.ok(rows.every((row) => ['Hybrid','Kitchen'].includes(row.category)));
+  assert.ok(rows.every((row) => ['High','Medium'].includes(row.priority)));
+
+  const styles = read('base.css');
+  assert.match(styles, /\[data-filter-button="category"\]\[aria-pressed="true"\]/);
+  assert.match(styles, /\[data-filter-button="priority"\]\[aria-pressed="true"\]/);
+});
+
 test('renders competitive intelligence only when research contains evidence', () => {
   const { KZ_PROSPECTS, KZCore } = load();
   const generic = KZ_PROSPECTS.find((row) => row.name === 'MK Mebel');
@@ -112,20 +134,15 @@ test('supports KPI shortcuts and evidenced competitor dossiers', () => {
   assert.match(interstone.source, /research\/almaty\/interstone\.md/);
 });
 
-test('ships both proposals, local assets and production root rewrite', () => {
-  const launcher = read('index_R_P.html');
-  assert.match(launcher, /proposal_A\.html/);
-  assert.match(launcher, /proposal_B\.html/);
-  assert.match(launcher, /class="brand"[\s\S]*?<\/a><p class="top-ownership">Market research &amp; dashboard created by <strong>Francisco González<\/strong><\/p>/);
-  for (const file of ['proposal_A.html', 'proposal_B.html']) {
-    const html = read(file);
-    assert.match(html, /src="data\.js"/);
-    assert.match(html, /src="app-core\.js"/);
-    assert.match(html, /https:\/\/www\.cosentino\.com\//);
-  }
+test('ships Executive Intelligence, local assets and production root rewrite', () => {
+  const html = read('proposal_A.html');
+  assert.match(html, /src="data\.js"/);
+  assert.match(html, /src="app-core\.js"/);
+  assert.match(html, /https:\/\/www\.cosentino\.com\//);
+  assert.doesNotMatch(html, /proposal_B\.html/);
   for (const brand of ['silestone', 'dekton', 'eclos', 'sensa']) {
     assert.ok(fs.statSync(`assets/${brand}.jpg`).size > 1000);
   }
   const config = JSON.parse(read('vercel.json'));
-  assert.deepEqual(config.rewrites[0], { source:'/', destination:'/index_R_P.html' });
+  assert.deepEqual(config.rewrites[0], { source:'/', destination:'/proposal_A.html' });
 });

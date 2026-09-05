@@ -2,23 +2,34 @@
   'use strict';
 
   const CITY_ORDER = Object.freeze(['Almaty','Astana','Shymkent']);
+  const FACET_ORDER = Object.freeze({
+    city:CITY_ORDER,
+    category:Object.freeze(['Hybrid','Interior design','Kitchen','Bathroom']),
+    priority:Object.freeze(['High','Medium','Low'])
+  });
   const DASHBOARD_DATE_ISO = '2026-09-03';
   const emptyFilters = () => ({ city:'', category:'', showroom:'', priority:'', search:'' });
   const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  function selectedCities(filtersOrValue) {
-    const raw = filtersOrValue && !Array.isArray(filtersOrValue) && typeof filtersOrValue === 'object' ? filtersOrValue.city : filtersOrValue;
+  function selectedFacetValues(key, filtersOrValue) {
+    const raw = filtersOrValue && !Array.isArray(filtersOrValue) && typeof filtersOrValue === 'object' ? filtersOrValue[key] : filtersOrValue;
     const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
     const selected = new Set(values);
-    return CITY_ORDER.filter((city)=>selected.has(city));
+    return (FACET_ORDER[key] || []).filter((value)=>selected.has(value));
+  }
+  function selectedCities(filtersOrValue) {
+    return selectedFacetValues('city',filtersOrValue);
   }
   function mapCities(filters) {
     const selected = selectedCities(filters);
     return selected.length ? selected : [...CITY_ORDER];
   }
+  function toggleFacetSelection(key, current, value) {
+    const selected = new Set(selectedFacetValues(key,current));
+    if (selected.has(value)) selected.delete(value); else selected.add(value);
+    return (FACET_ORDER[key] || []).filter((name)=>selected.has(name));
+  }
   function toggleCitySelection(current, city) {
-    const selected = new Set(selectedCities(current));
-    if (selected.has(city)) selected.delete(city); else selected.add(city);
-    return CITY_ORDER.filter((name)=>selected.has(name));
+    return toggleFacetSelection('city',current,city);
   }
   function hasCompetitiveEvidence(row) {
     const isMeaningful = (value) => {
@@ -35,11 +46,13 @@
   function derive(source, filters, sort) {
     const q = (filters.search || '').trim().toLowerCase();
     const cities = selectedCities(filters);
+    const categories = selectedFacetValues('category',filters);
+    const priorities = selectedFacetValues('priority',filters);
     const rows = source.filter((row) => {
       if (cities.length && !cities.includes(row.city)) return false;
-      if (filters.category && row.category !== filters.category) return false;
+      if (categories.length && !categories.includes(row.category)) return false;
       if (filters.showroom && row.showroom !== filters.showroom) return false;
-      if (filters.priority && row.priority !== filters.priority) return false;
+      if (priorities.length && !priorities.includes(row.priority)) return false;
       if (q && ![row.name,row.city,row.category,row.phone,row.email,row.address,row.website,row.brands,row.evidence].join(' ').toLowerCase().includes(q)) return false;
       return true;
     });
@@ -108,7 +121,7 @@
     });
     return points.map(({quality,...point})=>point);
   }
-  window.KZCore = Object.freeze({ emptyFilters, selectedCities, mapCities, toggleCitySelection, hasCompetitiveEvidence, competitiveBlockHTML, derive, metrics, executiveSummary, prospectsCSV, exportFilename, queue, layoutPoints, filtersForKpi });
+  window.KZCore = Object.freeze({ emptyFilters, selectedFacetValues, selectedCities, mapCities, toggleFacetSelection, toggleCitySelection, hasCompetitiveEvidence, competitiveBlockHTML, derive, metrics, executiveSummary, prospectsCSV, exportFilename, queue, layoutPoints, filtersForKpi });
 
   window.bootKZApp = function bootKZApp(options) {
     const source = window.KZ_PROSPECTS;
@@ -119,10 +132,9 @@
     const esc = escapeHTML;
     const categoryClass = (v) => 'cat-' + v.toLowerCase().replace(/\s+/g,'-');
     function syncFilterButtons() {
-      const cities = selectedCities(state.filters);
       $$('[data-filter-button]').forEach((button)=>{
         const key = button.dataset.filterButton;
-        const active = key === 'city' ? cities.includes(button.dataset.value) : state.filters[key] === button.dataset.value;
+        const active = FACET_ORDER[key] ? selectedFacetValues(key,state.filters).includes(button.dataset.value) : state.filters[key] === button.dataset.value;
         button.setAttribute('aria-pressed',String(active));
       });
     }
@@ -257,7 +269,7 @@
       const choice=event.target.closest('[data-select]'); if(choice){state.selectedId=choice.dataset.select;render();setTimeout(()=>{$('[data-detail].open h2')?.focus()},20);return;}
       if(event.target.closest('[data-close-detail]')){state.selectedId=null;render();return;}
       const reset=event.target.closest('[data-reset]'); if(reset){state.filters=emptyFilters();$$('[data-filter]').forEach(el=>el.value='');syncFilterButtons();render();return;}
-      const filterButton=event.target.closest('[data-filter-button]'); if(filterButton){const key=filterButton.dataset.filterButton;const value=filterButton.dataset.value;if(key==='city'){state.filters.city=toggleCitySelection(state.filters.city,value);}else{state.filters[key]=state.filters[key]===value?'':value;}syncFilterButtons();state.selectedId=null;render();return;}
+      const filterButton=event.target.closest('[data-filter-button]'); if(filterButton){const key=filterButton.dataset.filterButton;const value=filterButton.dataset.value;if(FACET_ORDER[key]){state.filters[key]=toggleFacetSelection(key,state.filters[key],value);}else{state.filters[key]=state.filters[key]===value?'':value;}syncFilterButtons();state.selectedId=null;render();return;}
       const view=event.target.closest('[data-view]'); if(view){$$('[data-view]').forEach(el=>el.classList.toggle('active',el===view));const target=$(`#view-${view.dataset.view}`);if(target){target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});target.tabIndex=-1;target.focus({preventScroll:true});}return;}
       const sort=event.target.closest('[data-sort]'); if(sort){const key=sort.dataset.sort;state.sort={key,dir:state.sort.key===key&&state.sort.dir==='desc'?'asc':'desc'};render();return;}
       const theme=event.target.closest('[data-theme-toggle]'); if(theme){const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('kz-theme',next)}catch(e){};return;}

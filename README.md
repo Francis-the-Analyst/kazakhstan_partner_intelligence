@@ -4,9 +4,10 @@ Executive-facing static web experience for prospect prioritisation across the Ka
 
 ## Entry points
 
-- `/` — proposal selector
-- `/proposal_A.html` — Executive Intelligence
-- `/proposal_B.html` — Market Command Center
+- `/` and `/proposal_A.html` — Executive Intelligence (the approved corporate/light interface)
+
+`proposal_B.html` and `index_R_P.html` (the earlier dark alternative and its selector) remain in the
+repository for reference but are no longer routed in production.
 
 The application is built with local HTML, CSS and JavaScript assets and requires no build command.
 
