@@ -146,3 +146,17 @@ test('ships Executive Intelligence, local assets and production root rewrite', (
   const config = JSON.parse(read('vercel.json'));
   assert.deepEqual(config.rewrites[0], { source:'/', destination:'/proposal_A.html' });
 });
+
+test('keeps the proposal entry points functionally aligned', () => {
+  const executive = read('proposal_A.html');
+  const alternative = read('proposal_B.html');
+  for (const html of [executive, alternative]) {
+    assert.match(html, /src="data\.js"/);
+    assert.match(html, /src="app-core\.js"/);
+    assert.match(html, /data-route="retail"/);
+    assert.match(html, /data-route="projects"/);
+    assert.match(html, /data-filter-toggle/);
+  }
+  assert.match(read('index_R_P.html'), /href="proposal_A\.html"/);
+  assert.match(read('index_R_P.html'), /href="proposal_B\.html"/);
+});
