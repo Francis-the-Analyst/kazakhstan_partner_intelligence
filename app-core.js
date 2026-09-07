@@ -140,6 +140,11 @@
     }
 
     const ownershipMarkup = '<p class="top-ownership">Market research &amp; dashboard created by <strong>Francisco González</strong></p>';
+    $$('.wordmark .brand-mark, .brand-button span').forEach((node)=>{ node.innerHTML='<img src="assets/cosentino-mark.svg" alt="Cosentino">'; node.classList.add('logo-asset'); });
+    $$('[data-page="projects"] .construction p').forEach((node)=>{ node.textContent='Projects research is available on request. Ask Francisco if you need a research.'; });
+    $$('[data-page="landing"] .project-choice i').forEach((node)=>{ node.textContent='Ask Francisco if you need a research →'; });
+    $$('#view-positioning .section-head').forEach((node)=>{ if(node.querySelector('.map-axis-copy')) return; const copy=document.createElement('span'); copy.className='map-axis-copy'; copy.innerHTML='<b>Y · Potential index / priority (0–100)</b><b>X · Price positioning and service breadth</b><small>Double ring = confirmed showroom · Hover or select a point for the complete dossier</small>'; node.appendChild(copy); });
+    const mapStyle=document.createElement('style'); mapStyle.textContent='.map-axis-copy{display:flex;flex-direction:column;gap:4px;max-width:430px;text-align:right;color:var(--muted);font-size:10px;line-height:1.35}.map-axis-copy b{color:var(--ink);font-weight:600}.map-axis-copy small{font-size:9px;color:var(--muted)}.logo-asset{overflow:hidden}.logo-asset img{width:100%;height:100%;display:block;object-fit:cover}'; document.head.appendChild(mapStyle);
     $$('.landing-nav .wordmark, .topbar .brand-button').forEach((brand)=>{
       if (!brand.nextElementSibling?.classList.contains('top-ownership')) brand.insertAdjacentHTML('afterend',ownershipMarkup);
     });
