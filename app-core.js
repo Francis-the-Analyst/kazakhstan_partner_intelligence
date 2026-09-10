@@ -109,7 +109,8 @@
     const yOffsets = [0,-4,4,-8,8,-12,12,-16,16];
     const seed = [...String(laneKey)].reduce((sum,char)=>sum+char.charCodeAt(0),0);
     ordered.forEach((row,index)=>{
-      const preferred = 10 + ((index*31 + seed)%81);
+       const price = { Low: .18, Medium: .46, 'Medium-High': .68, High: .86 }[row.price] ?? .46;
+       const preferred = Math.round(Math.max(8,Math.min(92,(price + (row.showroom === 'Yes' ? .12 : .03))*100)));
       let best = null;
       for (const offset of yOffsets) for (const x of xCandidates) {
         const y = Math.max(4,Math.min(96,row.score + offset));
@@ -140,17 +141,17 @@
     }
 
     const ownershipMarkup = '<p class="top-ownership">Market research &amp; dashboard created by <strong>Francisco González</strong></p>';
-    $$('.wordmark .brand-mark, .brand-button span').forEach((node)=>{ node.innerHTML='<img src="assets/cosentino-mark.svg" alt="Cosentino">'; node.classList.add('logo-asset'); });
+    $$('.wordmark .brand-mark, .brand-button span').forEach((node)=>{ node.innerHTML='<img src="assets/cosentino-corporate-reference.png" alt="Cosentino">'; node.classList.add('logo-asset'); });
     $$('[data-page="projects"] .construction p').forEach((node)=>{ node.textContent='Projects research is available on request. Ask Francisco if you need a research.'; });
     $$('[data-page="landing"] .project-choice i').forEach((node)=>{ node.textContent='Ask Francisco if you need a research →'; });
-    $$('#view-positioning .section-head').forEach((node)=>{ if(node.querySelector('.map-axis-copy')) return; const copy=document.createElement('span'); copy.className='map-axis-copy'; copy.innerHTML='<b>Y · Potential index / priority (0–100)</b><b>X · Price positioning and service breadth</b><small>Double ring = confirmed showroom · Hover or select a point for the complete dossier</small>'; node.appendChild(copy); });
+    $$('#view-positioning .section-head').forEach((node)=>{ if(node.querySelector('.map-axis-copy')) return; const copy=document.createElement('span'); copy.className='map-axis-copy'; copy.innerHTML='<b>Y · Processing, purchasing &amp; operational readiness · Potential index / priority (0–100)</b><b>X · Commercial reach &amp; showroom network</b><small>Price positioning and service breadth inform the horizontal position · Shape = commercial profile · Colour = rating · Double ring = confirmed showroom · Select a point for the complete dossier</small>'; node.appendChild(copy); });
     const mapStyle=document.createElement('style'); mapStyle.textContent='.map-axis-copy{display:flex;flex-direction:column;gap:4px;max-width:430px;text-align:right;color:var(--muted);font-size:10px;line-height:1.35}.map-axis-copy b{color:var(--ink);font-weight:600}.map-axis-copy small{font-size:9px;color:var(--muted)}.logo-asset{overflow:hidden}.logo-asset img{width:100%;height:100%;display:block;object-fit:cover}'; document.head.appendChild(mapStyle);
     $$('.landing-nav .wordmark, .topbar .brand-button').forEach((brand)=>{
       if (!brand.nextElementSibling?.classList.contains('top-ownership')) brand.insertAdjacentHTML('afterend',ownershipMarkup);
     });
     const projectHeader = $('[data-page="projects"] .project-grid > header');
     if (projectHeader && !projectHeader.querySelector('.wordmark')) {
-      projectHeader.insertAdjacentHTML('afterbegin',`<div class="project-identity"><a href="https://www.cosentino.com/" target="_blank" rel="noopener" class="wordmark"><span>C</span><b>COSENTINO</b></a>${ownershipMarkup}</div>`);
+       projectHeader.insertAdjacentHTML('afterbegin',`<div class="project-identity"><a href="https://www.cosentino.com/" target="_blank" rel="noopener" class="wordmark"><span class="brand-mark logo-asset"><img src="assets/cosentino-corporate-reference.png" alt="Cosentino"></span><b>COSENTINO</b></a>${ownershipMarkup}</div>`);
     }
     $$('.ownership, .market-title small, .landing footer span:last-child').forEach((legacy)=>legacy.hidden=true);
     const kpiActions = ['all','high','showroom','coverage'];
@@ -202,16 +203,13 @@
       const target = $(`[data-page="${name}"] h1, [data-page="${name}"] h2`);
       if (target) { target.tabIndex=-1; target.focus({preventScroll:true}); }
     }
-    function mapHTML(rows, cities) {
-      return cities.map((city) => {
-        const cityRows=rows.filter(r=>r.city===city);
-        const positions=new Map(layoutPoints(cityRows,city).map(point=>[point.id,point]));
-        const dots=cityRows.map((r)=>{
-          const point=positions.get(r.id);
-          return `<button class="map-dot ${categoryClass(r.category)} ${r.showroom==='Yes'?'has-showroom':''} ${state.selectedId===r.id?'selected':''}" style="--x:${point.x}%;--y:${point.y}%" data-select="${r.id}" aria-label="${esc(r.name)}, ${r.score} potential${r.showroom==='Yes'?', confirmed showroom':''}" title="${esc(r.name)} · ${r.score}/100 · ${r.showroom==='Yes'?'Showroom confirmed':'Showroom not confirmed'}"><span>${r.score}</span></button>`;
-        }).join('');
-        return `<section class="city-lane"><header><b>${city}</b><span>${cityRows.length} prospects</span></header><div class="lane-field"><i class="grid g1">100</i><i class="grid g2">70</i><i class="grid g3">40</i><i class="grid g4">0</i>${dots}</div></section>`;
+    function mapHTML(rows) {
+      const positions=new Map(layoutPoints(rows,'opportunity-field').map(point=>[point.id,point]));
+      const dots=rows.map((r)=>{
+        const point=positions.get(r.id);
+        return `<button class="map-dot ${categoryClass(r.category)} priority-${r.priority.toLowerCase()} ${r.showroom==='Yes'?'has-showroom':''} ${state.selectedId===r.id?'selected':''}" style="--x:${point.x}%;--y:${point.y}%" data-select="${r.id}" aria-label="${esc(r.name)}, ${r.score} potential, ${r.priority} rating${r.showroom==='Yes'?', confirmed showroom':''}" title="${esc(r.name)} · ${r.score}/100 · ${r.priority} rating · ${r.showroom==='Yes'?'Showroom confirmed':'Showroom not confirmed'}"><span>${r.score}</span></button>`;
       }).join('');
+      return `<div class="map-field"><div class="map-zone zone-develop">DEVELOP — GROW WITH THEM</div><div class="map-zone zone-priority">PRIORITY — ACT NOW</div><div class="map-zone zone-monitor">MONITOR — LOWER EVIDENCE</div><div class="map-zone zone-qualify">QUALIFY — VERIFY</div><span class="map-axis-y-title">PROCESSING, PURCHASING &amp; OPERATIONAL READINESS</span><span class="map-axis-y-tick tick-top">100</span><span class="map-axis-y-tick tick-bottom">0</span><span class="map-axis-x-title">COMMERCIAL REACH &amp; SHOWROOM NETWORK →</span><span class="map-axis-x-end x-left">Limited reach</span><span class="map-axis-x-end x-right">Broad reach</span>${dots}</div>`;
     }
     function queueHTML(rows) {
       return queue(rows,6).map((r,i)=>`<button class="target ${state.selectedId===r.id?'selected':''}" data-select="${r.id}"><span class="target-rank">${String(i+1).padStart(2,'0')}</span><span><b>${esc(r.name)}</b><small>${r.city} · ${r.category}</small></span><strong>${r.score}</strong></button>`).join('') || '<p class="empty">No prospects match these filters.</p>';
@@ -258,7 +256,7 @@
       $$('[data-map]').forEach((el)=>{
         el.style.setProperty('--city-count',cities.length);
         el.dataset.cityCount=String(cities.length);
-        el.innerHTML=mapHTML(rows,cities);
+        el.innerHTML=mapHTML(rows);
       });
       $$('[data-queue]').forEach(el=>el.innerHTML=queueHTML(rows));
       $$('[data-table-body]').forEach(el=>el.innerHTML=tableHTML(rows));
